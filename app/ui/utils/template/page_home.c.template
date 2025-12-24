@@ -1,0 +1,41 @@
+/*
+ * @Author: xiaozhi 
+ * @Date: 2024-09-24 23:32:02 
+ * @Last Modified by:   xiaozhi 
+ * @Last Modified time: 2024-09-24 23:32:02 
+ */
+
+#include <stdio.h>
+#include "lvgl.h"
+#include "color_conf.h"
+#include "image_conf.h"
+#include "font_conf.h"
+
+static lv_style_t com_style;
+
+static void com_style_init(){
+    lv_style_init(&com_style);
+    if(lv_style_is_empty(&com_style) == false)
+        lv_style_reset(&com_style);
+    lv_style_set_bg_color(&com_style,APP_COLOR_BLACK);
+    lv_style_set_radius(&com_style,0);
+    lv_style_set_border_width(&com_style,0);
+    lv_style_set_pad_all(&com_style,0);
+}
+
+static void obj_font_set(lv_obj_t *obj,int type, uint16_t weight){
+    lv_font_t* font = get_font(type, weight);
+	if(font != NULL)
+		lv_obj_set_style_text_font(obj, font, 0);
+}
+
+void init_page_home(void)
+{
+    com_style_init();
+    lv_obj_t * cont = lv_obj_create(lv_scr_act());
+    lv_obj_set_size(cont, LV_PCT(100), LV_PCT(100));
+    lv_obj_center(cont);
+    lv_obj_add_style(cont, &com_style, 0);
+
+    
+}

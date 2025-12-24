@@ -1,0 +1,48 @@
+/*
+ * @Author: xiaozhi 
+ * @Date: 2024-09-24 23:31:33 
+ * @Last Modified by:   xiaozhi 
+ * @Last Modified time: 2024-09-24 23:31:33 
+ */
+#ifndef _FONT_CONF_H_
+#define _FONT_CONF_H_
+
+#include "res_conf.h"
+#include "font_utils.h"
+#define FONT_SIZE_TIME 140
+#define FONT_SIZE_MAX 80
+#define FONT_SIZE_TIME_1 60
+#define FONT_SIZE_TITLE_1 36
+#define FONT_SIZE_TITLE_2 32
+#define FONT_SIZE_TITLE_3 28
+#define FONT_SIZE_TEXT_1 24
+#define FONT_SIZE_TEXT_2 20
+#define FONT_SIZE_TEXT_3 18
+#define FONT_SIZE_TEXT_4 16
+#define FONT_SIZE_TEXT_5 14
+
+typedef enum
+{
+	FONT_TYPE_CN = 0,
+	FONT_TYPE_CN_LIGHT,
+	FONT_TYPE_LETTER,
+	FONT_TYPE_LETTER_LIGHT,
+	FONT_TYPE_NUMBER,
+}FONT_TYPE;
+
+#define FONT_TYPE_CN_PATH FONT_PATH "SOURCEHANSANSCN_REGULAR.OTF"
+#define FONT_TYPE_CN_LIGHT_PATH FONT_PATH "SOURCEHANSANSCN_LIGHT.OTF"
+#define FONT_TYPE_LETTER_PATH FONT_PATH "SOURCEHANSANSCN_REGULAR.OTF"
+#define FONT_TYPE_LETTER_LIGHT_PATH FONT_PATH "SOURCEHANSANSCN_LIGHT.OTF"
+#define FONT_TYPE_NUMBER_PATH FONT_PATH "Library-3-am-3.otf"
+
+#define FONT_INIT() \
+    do { \
+        add_font(FONT_TYPE_CN,FONT_TYPE_CN_PATH); \
+        add_font(FONT_TYPE_CN_LIGHT,FONT_TYPE_CN_LIGHT_PATH); \
+        add_font(FONT_TYPE_LETTER,FONT_TYPE_LETTER_PATH); \
+        add_font(FONT_TYPE_LETTER_LIGHT,FONT_TYPE_LETTER_LIGHT_PATH); \
+        add_font(FONT_TYPE_NUMBER,FONT_TYPE_NUMBER_PATH); \
+    } while (0)  
+
+#endif
