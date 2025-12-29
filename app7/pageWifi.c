@@ -2,6 +2,7 @@
 #include <string.h>
 #include "lvgl.h"
 #include "page_conf.h"
+#include "image_conf.h"
 #include "wifi/wpa_manager.h"
 
 /* ========== 全局变量 ========== */
@@ -11,6 +12,41 @@ static lv_obj_t * ta_password = NULL;   // 密码输入框
 static lv_obj_t * keyboard = NULL;      // 键盘对象
 static lv_obj_t * label_status = NULL;  // 状态提示标签
 static lv_obj_t * scan_list = NULL;     // WiFi扫描结果列表
+
+/**
+ * @brief 清理WiFi页面资源
+ */
+void cleanup_pageWifi(void)
+{
+    // 断开WiFi连接（注：wpa_manager没有提供close函数，使用disconnect代替）
+    wpa_manager_wifi_disconnect();
+    
+    // 清空全局变量
+    ta_ssid = NULL;
+    ta_password = NULL;
+    keyboard = NULL;
+    label_status = NULL;
+    scan_list = NULL;
+    
+    printf("pageWifi cleanup completed\n");
+}
+
+/**
+ * @brief 返回按钮点击事件回调 - 返回菜单页面
+ */
+static void back_btn_click_event_cb(lv_event_t * e)
+{
+    printf("Back button clicked, returning to Menu page\n");
+    
+    // 清理当前页面资源
+    cleanup_pageWifi();
+    
+    // 清空屏幕
+    lv_obj_clean(lv_scr_act());
+    
+    // 切换到菜单页面
+    init_pageMenu();
+}
 
 /**
  * @brief WiFi扫描结果回调函数
@@ -328,18 +364,36 @@ void init_pageWifi(void)
     lv_obj_set_style_bg_color(lv_scr_act(), lv_color_hex(0xF0F0F0), LV_PART_MAIN);  // 浅灰色背景
     
     
-    // /* ========== 1. 标题区域 ========== */
-    // lv_obj_t * label_title = lv_label_create(lv_scr_act());
-    // lv_label_set_text(label_title, "WiFi Connection");
-    // lv_obj_set_style_text_font(label_title, &lv_font_montserrat_18, LV_PART_MAIN);
-    // lv_obj_set_style_text_color(label_title, lv_color_hex(0x2C3E50), LV_PART_MAIN);
-    // lv_obj_align(label_title, LV_ALIGN_TOP_LEFT, 20, 10);
+    /* ========== 1.5 返回按钮区域（左上角）========== */
+    lv_obj_t * back_container = lv_obj_create(lv_scr_act());
+    lv_obj_set_size(back_container, 200, 50);
+    lv_obj_align(back_container, LV_ALIGN_TOP_LEFT, 10, 5);
+    lv_obj_set_style_bg_opa(back_container, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(back_container, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(back_container, 0, LV_PART_MAIN);
+    lv_obj_add_flag(back_container, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_clear_flag(back_container, LV_OBJ_FLAG_SCROLLABLE);
+    
+    // 返回图标
+    lv_obj_t * back_img = lv_img_create(back_container);
+    lv_img_set_src(back_img, GET_IMAGE_PATH("main/back.png"));
+    lv_obj_align(back_img, LV_ALIGN_LEFT_MID, 10, 0);
+    
+    // 标题文字
+    lv_obj_t * title_label = lv_label_create(back_container);
+    lv_label_set_text(title_label, "WiFi Settings");
+    lv_obj_set_style_text_font(title_label, &lv_font_montserrat_20, LV_PART_MAIN);
+    lv_obj_set_style_text_color(title_label, lv_color_hex(0x2C3E50), LV_PART_MAIN);
+    lv_obj_align_to(title_label, back_img, LV_ALIGN_OUT_RIGHT_MID, 10, 0);
+    
+    // 添加返回按钮点击事件
+    lv_obj_add_event_cb(back_container, back_btn_click_event_cb, LV_EVENT_CLICKED, NULL);
     
     
     /* ========== 2. 输入区域容器（左侧） ========== */
     lv_obj_t * input_container = lv_obj_create(lv_scr_act());
-    lv_obj_set_size(input_container, 420, 260); 
-    lv_obj_align(input_container, LV_ALIGN_LEFT_MID, 20, 0);
+    lv_obj_set_size(input_container, 420, 220); 
+    lv_obj_align(input_container, LV_ALIGN_BOTTOM_LEFT, 20, -10);
     
     // 设置容器样式
     lv_obj_set_style_bg_color(input_container, lv_color_hex(0xFFFFFF), LV_PART_MAIN);

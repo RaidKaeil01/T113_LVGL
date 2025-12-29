@@ -11,12 +11,12 @@
 extern void lv_port_disp_init(bool is_disp_orientation);
 extern void lv_port_indev_init(void);
 
-// 天气数据回调函数 - 打印到终端用于测试
-void my_weather_callback(char* weather_str) {
-    printf("\n========== 天气数据回调 ==========\n");
-    printf("接收到天气信息: %s\n", weather_str);
-    printf("=================================\n\n");
-}
+// // 天气数据回调函数 - 打印到终端用于测试
+// void my_weather_callback(char* weather_str) {
+//     printf("\n========== 天气数据回调 ==========\n");
+//     printf("接收到天气信息: %s\n", weather_str);
+//     printf("=================================\n\n");
+// }
 
 int main() {
     //LVGL框架初始化
@@ -32,12 +32,17 @@ int main() {
     //lv_example_hello_world();//执行功能函数
 
    // init_page1();//页面初始化
-    init_pageStart();//启动页面初始化
+   // init_pageStart();//启动页面初始化
    // init_pageWifi();//WiFi页面初始化
     
    // http_request_create();//HTTP模块初始化
    // http_set_weather_callback(my_weather_callback);  // 先注册回调
     //http_get_weather_async("SPhQ7CZNrk6Rzn8_H", "上海");//异步获取天气数据
+
+   // init_pageMenu();
+   init_pageStart();
+   //init_pageClock();
+   //init_page_setting();
    
     while (1) {
         lv_task_handler();
