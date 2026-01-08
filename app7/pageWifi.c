@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include "lvgl.h"
 #include "page_conf.h"
 #include "image_conf.h"
@@ -382,7 +383,7 @@ void init_pageWifi(void)
     // 标题文字
     lv_obj_t * title_label = lv_label_create(back_container);
     lv_label_set_text(title_label, "WiFi Settings");
-    lv_obj_set_style_text_font(title_label, &lv_font_montserrat_20, LV_PART_MAIN);
+    lv_obj_set_style_text_font(title_label, &lv_font_montserrat_14, LV_PART_MAIN);
     lv_obj_set_style_text_color(title_label, lv_color_hex(0x2C3E50), LV_PART_MAIN);
     lv_obj_align_to(title_label, back_img, LV_ALIGN_OUT_RIGHT_MID, 10, 0);
     

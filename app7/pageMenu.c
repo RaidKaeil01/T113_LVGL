@@ -7,15 +7,25 @@
 // 通用样式
 static lv_style_t com_style;
 
+// 前向声明
+static void swipe_event_cb(lv_event_t * e);
+
 /**
  * @brief 清理菜单页面资源
  */
 void cleanup_pageMenu(void)
 {
-    // 清理通用样式
+    printf("Cleaning up pageMenu resources...\n");
+    
+    // 1. 清理通用样式
     if(com_style.prop_cnt > 0) {
         lv_style_reset(&com_style);
+        printf("Style reset\n");
     }
+    
+    // 2. 移除屏幕上的所有事件回调（特别是手势事件）
+    lv_obj_remove_event_cb(lv_scr_act(), swipe_event_cb);
+    printf("Gesture event removed\n");
     
     printf("pageMenu cleanup completed\n");
 }
@@ -88,6 +98,18 @@ static void menu_click_event_cb(lv_event_t * e)
         // 切换到WiFi页面
         init_pageWifi();
     }
+    else if(strcmp(menu_name, "Music") == 0) {
+        printf("Switching to Music page\n");
+        
+        // 清理当前页面资源
+        cleanup_pageMenu();
+        
+        // 清空屏幕
+        lv_obj_clean(lv_scr_act());
+        
+        // 切换到音乐页面
+        init_pageMusic();
+    }
 }
 
 /**
@@ -121,7 +143,7 @@ static lv_obj_t * init_item(lv_obj_t *parent, char *imgurl, char *str)
     
     // 初始化标签控件
     lv_obj_t *label = lv_label_create(cont);
-    lv_obj_set_style_text_font(label, &lv_font_montserrat_20, LV_PART_MAIN);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_14, LV_PART_MAIN);
     lv_label_set_text(label, str);
     lv_obj_set_style_text_color(label, lv_color_hex(0x000000), 0);
     lv_obj_align_to(label, img, LV_ALIGN_OUT_BOTTOM_MID, 0, 0);

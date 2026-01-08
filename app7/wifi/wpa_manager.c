@@ -190,6 +190,35 @@ void wpa_manager_wifi_status(void)
 }
 
 /**
+ * @brief 同步检测WiFi是否已连接
+ * @return 1-已连接，0-未连接
+ * @note 使用全局缓存状态，快速返回结果
+ */
+int wpa_manager_is_connected(void)
+{
+    // 方式1：使用缓存状态（快速，适合频繁查询）
+    if (g_connect_status == WPA_WIFI_CONNECT) {
+        return 1;
+    }
+    
+    // 方式2：实时查询确认（更准确，但较慢）
+    char reply_buf[512] = {0};
+    size_t reply_len = sizeof(reply_buf);
+    
+    if (wifi_send_command("STATUS", reply_buf, &reply_len) == 0) {
+        reply_buf[reply_len] = '\0';
+        if (strstr(reply_buf, "wpa_state=COMPLETED") != NULL) {
+            g_connect_status = WPA_WIFI_CONNECT;
+            printf("✅ WiFi is connected\n");
+            return 1;
+        }
+    }
+    
+    printf("⚠️  WiFi is NOT connected (status=%d)\n", g_connect_status);
+    return 0;
+}
+
+/**
  * @brief 连接到指定WiFi
  * @param wifi_info WiFi信息指针
  * @return 0-成功，非0-失败
@@ -569,6 +598,53 @@ void wpa_manager_add_callback(wifi_status_callback_fun wifi_status_f,
     wifi_status_func = wifi_status_f;
     connect_status_func = connect_status_f;
     printf("WiFi callback functions registered\n");
+}
+
+/**
+ * @brief 获取当前WiFi连接状态
+ * @return WiFi连接状态枚举值
+ */
+WPA_WIFI_CONNECT_STATUS_E wpa_manager_get_connect_status(void)
+{
+    return g_connect_status;
+}
+
+/**
+ * @brief 上电自动连接初始WiFi（非阻塞版本）
+ * @param wifi_info WiFi信息指针
+ * @param timeout_sec 超时时间（秒）- 已废弃，保留兼容性
+ * @return 0-命令发送成功，-1-发送失败
+ * @note 仅发起连接命令，不等待连接结果，结果通过回调通知
+ */
+int wpa_manager_auto_connect_default_wifi(wpa_ctrl_wifi_info_t *wifi_info, int timeout_sec)
+{
+    if (wifi_info == NULL) {
+        printf("❌ Error: wifi_info is NULL\n");
+        return -1;
+    }
+    
+    printf("\n========== 自动连接初始WiFi ==========\n");
+    printf("📡 SSID: %s\n", wifi_info->ssid);
+    printf("🚀 Mode: Non-blocking (async)\n");
+    printf("=================================\n\n");
+    
+    // 等待WiFi模块初始化完成（1秒）
+    printf("⏳ Waiting 1 second for WiFi module ready...\n");
+    sleep(1);
+    
+    // 发起连接命令（不等待结果）
+    int ret = wpa_manager_wifi_connect(wifi_info);
+    if (ret != 0) {
+        printf("❌ WiFi connection command failed\n\n");
+        return -1;
+    }
+    
+    printf("✅ WiFi connection request sent\n");
+    printf("💡 Connection result will be notified via callback\n");
+    printf("   - Check console for connection status\n");
+    printf("   - Or use Menu → WiFi Settings to check manually\n\n");
+    
+    return 0;  // 命令发送成功，不等待结果
 }
 
 /**

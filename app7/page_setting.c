@@ -34,10 +34,19 @@ static void obj_font_set(lv_obj_t *obj,int type, uint16_t weight){
  */
 void cleanup_page_setting(void)
 {
-    // 清理通用样式
+    printf("Cleaning up page_setting resources...\n");
+    
+    // 1. 清理通用样式
     if(lv_style_is_empty(&com_style) == false) {
         lv_style_reset(&com_style);
+        printf("Style reset\n");
     }
+    
+    // 2. 移除屏幕上所有事件回调（防止手势事件残留）
+    lv_obj_remove_event_cb(lv_scr_act(), NULL);
+    
+    // 3. 清理所有定时器（LVGL会自动处理已删除对象的定时器，这里做保险）
+    // 注意：如果有全局定时器变量，需要在这里显式删除
     
     printf("page_setting cleanup completed\n");
 }
@@ -63,6 +72,10 @@ static void init_back_view(lv_obj_t *parent){
     lv_obj_set_size(cont,LV_SIZE_CONTENT,LV_SIZE_CONTENT);
     lv_obj_add_style(cont,&com_style,LV_PART_MAIN);
     lv_obj_align(cont,LV_ALIGN_TOP_LEFT,0,10);
+    
+    // 禁用返回按钮容器的滚动和手势冒泡
+    lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(cont, LV_OBJ_FLAG_GESTURE_BUBBLE);
 
     lv_obj_t * img_back = lv_img_create(cont);
     lv_img_set_src(img_back, GET_IMAGE_PATH("main/back.png"));
@@ -150,16 +163,28 @@ static lv_obj_t * init_setting_view(lv_obj_t *parent){
 }
 
 void init_page_setting(){
+    printf("Initializing page_setting...\n");
+    
+    // 初始化样式
     com_style_init();
+    
+    // 创建主容器
     lv_obj_t * cont = lv_obj_create(lv_scr_act());
     lv_obj_set_size(cont,LV_PCT(100),LV_PCT(100));
     lv_obj_add_style(cont,&com_style,LV_PART_MAIN);
-
+    
+    // ⚠️ 关键：禁用主容器的滚动和手势冒泡，防止误触发滑动返回
+    lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(cont, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    
+    // 禁用屏幕对象的手势冒泡（防止pageStart的手势事件残留）
+    lv_obj_clear_flag(lv_scr_act(), LV_OBJ_FLAG_GESTURE_BUBBLE);
+    
+    // 初始化子视图
     init_back_view(cont);
-
     init_setting_view(cont);
-
-
+    
+    printf("page_setting initialized successfully\n");
 }
 
     

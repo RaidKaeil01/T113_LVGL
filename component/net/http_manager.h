@@ -23,7 +23,20 @@ typedef struct
     size_t size;
 } http_resp_data_t;
 
-typedef void (* weather_callback_fun)(char* str);
+/**
+ * @brief 天气数据结构体
+ */
+typedef struct {
+    char city[32];           // 城市名称
+    char weather[32];        // 天气状态（晴/阴/雨/雪）
+    char temperature[16];    // 温度（如"25"）
+    char code[8];            // 天气代码（用于匹配图标）
+    char update_time[32];    // 更新时间 "2026-01-08T11:47:24+08:00"
+    char date[16];           // 日期 "2026-01-08"
+    int weekday;             // 星期 (0=周日, 1=周一, ..., 6=周六)
+} weather_data_t;
+
+typedef void (* weather_callback_fun)(weather_data_t* data);
 
 int http_request_create(void);
 

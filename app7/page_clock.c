@@ -41,25 +41,33 @@ static void obj_font_set(lv_obj_t *obj,int type, uint16_t weight){
  */
 void cleanup_pageClock(void)
 {
-    // 删除定时器
+    printf("Cleaning up pageClock resources...\n");
+    
+    // 1. 删除定时器
     if(refresh_timer != NULL) {
         lv_timer_del(refresh_timer);
         refresh_timer = NULL;
+        printf("Refresh timer deleted\n");
     }
     
-    // 关闭弹窗（如果存在）
+    // 2. 关闭弹窗（如果存在）
     if(countdown_msgbox != NULL) {
         lv_msgbox_close(countdown_msgbox);
         countdown_msgbox = NULL;
         countdown_label = NULL;
+        printf("Countdown msgbox closed\n");
     }
     
-    // 清理通用样式
+    // 3. 移除屏幕上的所有事件回调
+    lv_obj_remove_event_cb(lv_scr_act(), NULL);
+    
+    // 4. 清理通用样式
     if(lv_style_is_empty(&com_style) == false) {
         lv_style_reset(&com_style);
+        printf("Style reset\n");
     }
     
-    // 清空全局变量
+    // 5. 清空全局变量
     count_time_btn = NULL;
     count_time_label = NULL;
     timer_roller = NULL;
@@ -302,12 +310,24 @@ static lv_obj_t * init_setting_param_view(lv_obj_t *parent){
 
 void init_pageClock()
 {
+    printf("Initializing pageClock...\n");
+    
+    // 初始化样式
     com_style_init();
-    //创建页面对象
+    
+    // 创建页面对象
     lv_obj_t * cont = lv_obj_create(lv_scr_act());
     lv_obj_set_size(cont, LV_PCT(100), LV_PCT(100));
     lv_obj_add_style(cont, &com_style, LV_PART_MAIN);
-    //初始化标题界面
+    
+    // ⚠️ 关键：禁用主容器的滚动和手势冒泡，防止误触发滑动返回
+    lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(cont, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    
+    // 禁用屏幕对象的手势冒泡（防止其他页面的手势事件残留）
+    lv_obj_clear_flag(lv_scr_act(), LV_OBJ_FLAG_GESTURE_BUBBLE);
+    
+    // 初始化标题界面
     lv_obj_t *title_view =  init_title_view(cont);
     //初始化闹铃设置界面
     lv_obj_t * time_view = init_setting_param_view(cont);

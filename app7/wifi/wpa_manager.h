@@ -85,11 +85,26 @@ int wpa_manager_open(void);
 void wpa_manager_wifi_status(void);
 
 /**
+ * @brief 同步检测WiFi是否已连接
+ * @return 1-已连接，0-未连接
+ * @note 使用全局缓存状态，快速返回结果
+ */
+int wpa_manager_is_connected(void);
+
+/**
  * @brief 连接到指定WiFi
  * @param wifi_info WiFi信息指针（包含SSID和密码）
- * @return 0-命令发送成功，非0-失败
+ * @return 0-成功，非0-失败
  */
 int wpa_manager_wifi_connect(wpa_ctrl_wifi_info_t *wifi_info);
+
+/**
+ * @brief 上电自动连接初始WiFi（带超时等待）
+ * @param wifi_info WiFi信息指针
+ * @param timeout_sec 超时时间（秒）
+ * @return 1-连接成功，0-连接失败或超时
+ */
+int wpa_manager_auto_connect_default_wifi(wpa_ctrl_wifi_info_t *wifi_info, int timeout_sec);
 
 /**
  * @brief 断开当前WiFi连接

@@ -1,7 +1,11 @@
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>  // atoi函数
 #include "lvgl.h"
 #include "page_conf.h"
 #include "image_conf.h"
+#include "font_conf.h"  // 引入中文字体配置
+#include "net/http_manager.h"  // 引入天气数据结构体定义
 
 /* ========== 全局变量 ========== */
 // 时间显示标签
@@ -11,6 +15,8 @@ static lv_obj_t * label_week = NULL;
 
 // 天气信息标签（天气状态和温度合并显示）
 static lv_obj_t * label_weather = NULL;
+static lv_obj_t * label_city = NULL;     // 城市名称标签
+static lv_obj_t * icon_label = NULL;     // 天气图标标签
 
 // 状态提示标签
 static lv_obj_t * label_status = NULL;
@@ -19,21 +25,248 @@ static lv_obj_t * label_status = NULL;
 static lv_timer_t * time_timer = NULL;
 
 /**
+ * @brief 天气数据全局缓存（页面切换不丢失）
+ * @note 保存API返回的所有数据，用于页面重新进入时恢复UI
+ */
+static struct {
+    // 时间数据
+    int hour;
+    int minute;
+    int second;
+    
+    // 日期数据
+    char date[16];        // "2026-01-08"
+    int weekday;          // 0=周日, 1=周一, ..., 6=周六
+    
+    // 天气数据
+    char city[32];        // "成都"
+    char weather[32];     // "阴"
+    char temperature[16]; // "9"
+    char weather_code[8]; // "9"
+    
+    bool initialized;     // 标记是否已从API初始化
+} g_weather_state = {
+    .hour = 0,
+    .minute = 0,
+    .second = 0,
+    .date = "",
+    .weekday = 0,
+    .city = "",
+    .weather = "",
+    .temperature = "",
+    .weather_code = "",
+    .initialized = false
+};
+
+// 前向声明
+static void swipe_event_cb(lv_event_t * e);
+
+/**
+ * @brief 封装的字体设置函数
+ * @param obj LVGL对象
+ * @param type 字体类型（FONT_TYPE_CN等）
+ * @param weight 字体大小
+ */
+static void obj_font_set(lv_obj_t *obj, int type, uint16_t weight) {
+    lv_font_t* font = get_font(type, weight);
+    if(font != NULL)
+        lv_obj_set_style_text_font(obj, font, LV_PART_MAIN);
+}
+
+/**
+ * @brief 根据天气代码映射天气图标图片路径
+ * @param code 天气代码字符串（如"9"）
+ * @return 天气图标PNG图片路径
+ */
+static const char* get_weather_icon(const char *code) {
+    int code_int = atoi(code);
+    
+    // 根据心知天气代码映射PNG图标路径
+    switch(code_int) {
+        case 0:  // 晴（白天）
+        case 1:  // 晴（夜间）
+            return "A:res/image/start/weather_cloudy.png";  // 晴天（暂用weather_cloudy.png）
+            
+        case 4:  // 多云
+        case 5:  // 多云转阴
+            return "A:res/image/start/weather_cloudy.png";
+            
+        case 9:  // 阴天
+            return "A:res/image/start/weather_cloudy.png";
+            
+        case 10: // 阵雨
+        case 13: // 小雨
+            return "A:res/image/start/weather_smallrain.png";
+            
+        case 14: // 中雨
+        case 15: // 大雨
+        case 16: // 暴雨
+        case 17: // 大暴雨
+        case 18: // 特大暴雨
+            return "A:res/image/start/weather_heavyrain.png";
+            
+        case 19: // 冰雹
+            return "A:res/image/start/weather_heavyrain.png";
+            
+        case 20: // 雨夹雪
+            return "A:res/image/start/weather_snow.png";
+            
+        case 21: // 雷阵雨
+        case 22: // 雷阵雨伴有冰雹
+            return "A:res/image/start/weather_thunder.png";
+            
+        case 26: // 小雪
+        case 27: // 中雪
+        case 28: // 大雪
+        case 29: // 暴雪
+            return "A:res/image/start/weather_snow.png";
+            
+        case 30: // 雾
+        case 31: // 霾
+        case 32: // 沙尘
+        case 33: // 扬沙
+        case 34: // 强沙尘暴
+        case 35: // 大雾
+        case 49: // 浓雾
+        case 53: // 霾
+            return "A:res/image/start/weather_fog.png";
+            
+        default:
+            return "A:res/image/start/weather_cloudy.png";  // 默认多云图标
+    }
+}
+
+/**
+ * @brief 天气数据回调函数
+ * @param data 天气数据结构体指针
+ * @note 由http_manager的网络线程调用，更新pageStart界面的天气信息
+ */
+void pageStart_weather_callback(weather_data_t *data) {
+    printf("\n========== 天气数据回调 ==========\n");
+    printf("接收到天气信息:\n");
+    printf("  城市: %s\n", data->city);
+    printf("  天气: %s\n", data->weather);
+    printf("  温度: %s°C\n", data->temperature);
+    printf("  代码: %s\n", data->code);
+    printf("  日期: %s\n", data->date);
+    printf("  星期: %d (0=周日)\n", data->weekday);
+    printf("  更新时间: %s\n", data->update_time);
+    printf("=================================\n\n");
+    
+    /* ========== 第一步：保存数据到全局缓存 ========== */
+    // 保存日期
+    if(strlen(data->date) > 0) {
+        strncpy(g_weather_state.date, data->date, sizeof(g_weather_state.date) - 1);
+        g_weather_state.date[sizeof(g_weather_state.date) - 1] = '\0';
+    }
+    
+    // 保存星期
+    g_weather_state.weekday = data->weekday;
+    
+    // 保存城市
+    strncpy(g_weather_state.city, data->city, sizeof(g_weather_state.city) - 1);
+    g_weather_state.city[sizeof(g_weather_state.city) - 1] = '\0';
+    
+    // 保存天气状态
+    strncpy(g_weather_state.weather, data->weather, sizeof(g_weather_state.weather) - 1);
+    g_weather_state.weather[sizeof(g_weather_state.weather) - 1] = '\0';
+    
+    // 保存温度
+    strncpy(g_weather_state.temperature, data->temperature, sizeof(g_weather_state.temperature) - 1);
+    g_weather_state.temperature[sizeof(g_weather_state.temperature) - 1] = '\0';
+    
+    // 保存天气代码
+    strncpy(g_weather_state.weather_code, data->code, sizeof(g_weather_state.weather_code) - 1);
+    g_weather_state.weather_code[sizeof(g_weather_state.weather_code) - 1] = '\0';
+    
+    // 保存时间（仅首次）
+    if(!g_weather_state.initialized && strlen(data->update_time) > 0) {
+        if(sscanf(data->update_time, "%d:%d:%d", 
+                  &g_weather_state.hour, 
+                  &g_weather_state.minute, 
+                  &g_weather_state.second) == 3) {
+            g_weather_state.initialized = true;
+            printf("✅ 时间已从天气API同步: %02d:%02d:%02d\n", 
+                   g_weather_state.hour, g_weather_state.minute, g_weather_state.second);
+        } else {
+            printf("⚠️  时间解析失败: %s\n", data->update_time);
+        }
+    }
+    
+    printf("💾 数据已保存到全局缓存\n\n");
+    
+    /* ========== 第二步：更新UI显示 ========== */
+    // 更新日期
+    if(label_date != NULL && strlen(g_weather_state.date) > 0) {
+        lv_label_set_text(label_date, g_weather_state.date);
+        printf("✅ 日期标签已更新: %s\n", g_weather_state.date);
+    }
+    
+    // 更新星期
+    if(label_week != NULL) {
+        const char *weekday_names[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
+        if(g_weather_state.weekday >= 0 && g_weather_state.weekday <= 6) {
+            lv_label_set_text(label_week, weekday_names[g_weather_state.weekday]);
+            printf("✅ 星期标签已更新: %s\n", weekday_names[g_weather_state.weekday]);
+        }
+    }
+    
+    // 更新城市名称
+    if(label_city != NULL) {
+        lv_label_set_text(label_city, g_weather_state.city);
+        printf("✅ 城市标签已更新: %s\n", g_weather_state.city);
+    }
+    
+    // 更新天气状态和温度
+    if(label_weather != NULL) {
+        char weather_display[64];
+        snprintf(weather_display, sizeof(weather_display), "%s %s°C", 
+                 g_weather_state.weather, g_weather_state.temperature);
+        lv_label_set_text(label_weather, weather_display);
+        printf("✅ 天气标签已更新: %s\n", weather_display);
+    }
+    
+    // 更新天气图标
+    if(icon_label != NULL) {
+        const char *icon_path = get_weather_icon(g_weather_state.weather_code);
+        lv_img_set_src(icon_label, icon_path);
+        printf("✅ 天气图标已更新: code=%s -> icon=%s\n", g_weather_state.weather_code, icon_path);
+    }
+    
+    // 更新时间显示
+    if(label_time != NULL && g_weather_state.initialized) {
+        lv_label_set_text_fmt(label_time, "%02d:%02d:%02d", 
+            g_weather_state.hour, g_weather_state.minute, g_weather_state.second);
+        printf("✅ 时间标签已更新: %02d:%02d:%02d\n", 
+               g_weather_state.hour, g_weather_state.minute, g_weather_state.second);
+    }
+}
+
+/**
  * @brief 清理页面资源
  */
 void cleanup_pageStart(void)
 {
-    // 删除定时器
+    printf("Cleaning up pageStart resources...\n");
+    
+    // 1. 删除定时器
     if(time_timer != NULL) {
         lv_timer_del(time_timer);
         time_timer = NULL;
+        printf("Time timer deleted\n");
     }
     
-    // 清空全局变量
+    // 2. 移除屏幕上的所有事件回调（特别是手势事件）
+    lv_obj_remove_event_cb(lv_scr_act(), swipe_event_cb);
+    printf("Gesture event removed\n");
+    
+    // 3. 清空全局变量
     label_time = NULL;
     label_date = NULL;
     label_week = NULL;
     label_weather = NULL;
+    label_city = NULL;
+    icon_label = NULL;
     label_status = NULL;
     
     printf("pageStart cleanup completed\n");
@@ -63,31 +296,33 @@ static void swipe_event_cb(lv_event_t * e)
 /**
  * @brief 定时器回调函数 - 更新时间显示
  * @param timer 定时器对象指针
- * @note 每秒更新一次时间显示（实际项目中应从RTC获取真实时间）
+ * @note 每秒递增时间，初始值来自天气API的update_time字段
  */
 static void time_update_timer_cb(lv_timer_t * timer)
 {
-    static int hour = 14;
-    static int minute = 30;
-    static int second = 0;
+    // 如果时间未初始化，等待天气API回调
+    if(!g_weather_state.initialized) {
+        return;
+    }
     
-    // 模拟时间更新（实际项目中应从RTC获取）
-    second++;
-    if(second >= 60) {
-        second = 0;
-        minute++;
-        if(minute >= 60) {
-            minute = 0;
-            hour++;
-            if(hour >= 24) {
-                hour = 0;
+    // 时间递增
+    g_weather_state.second++;
+    if(g_weather_state.second >= 60) {
+        g_weather_state.second = 0;
+        g_weather_state.minute++;
+        if(g_weather_state.minute >= 60) {
+            g_weather_state.minute = 0;
+            g_weather_state.hour++;
+            if(g_weather_state.hour >= 24) {
+                g_weather_state.hour = 0;
             }
         }
     }
     
-    // 更新时间显示
+    // 更新UI显示
     if(label_time != NULL) {
-        lv_label_set_text_fmt(label_time, "%02d:%02d:%02d", hour, minute, second);
+        lv_label_set_text_fmt(label_time, "%02d:%02d:%02d", 
+            g_weather_state.hour, g_weather_state.minute, g_weather_state.second);
     }
 }
 
@@ -124,22 +359,10 @@ void init_pageStart(void)
     // lv_obj_align_to(label_avatar_placeholder, avatar_container, LV_ALIGN_OUT_RIGHT_MID, 10, 0);  // 在头像右侧，间隔10px
     
     
-    /* ========== 2. 天气+时间信息区（整体容器 - 左右布局）========== */
-lv_obj_t * info_container = lv_obj_create(lv_scr_act());
-lv_obj_set_size(info_container, 300, 280);       // 整体容器尺寸 300x280
-lv_obj_align(info_container, LV_ALIGN_TOP_LEFT, 280, 0);
-
-// 整体容器样式（透明）
-lv_obj_set_style_bg_opa(info_container, LV_OPA_TRANSP, LV_PART_MAIN);
-lv_obj_set_style_border_width(info_container, 0, LV_PART_MAIN);
-lv_obj_set_style_radius(info_container, 0, LV_PART_MAIN);
-lv_obj_set_style_pad_all(info_container, 0, LV_PART_MAIN);  // 无内边距
-
-
-/* ---------- 2.1 左侧：时间显示区 ---------- */
-lv_obj_t * time_container = lv_obj_create(info_container);
+    /* ========== 2. 时间显示区（独立容器）========== */
+lv_obj_t * time_container = lv_obj_create(lv_scr_act());
 lv_obj_set_size(time_container, 120, 280);       // 时间容器尺寸 120x280
-lv_obj_align(time_container, LV_ALIGN_TOP_LEFT, 0, 0);  // 左上角对齐
+lv_obj_align(time_container, LV_ALIGN_TOP_LEFT, 280, 0);  // 紧挨着头像容器右侧
 
 // 时间容器样式
 lv_obj_set_style_bg_opa(time_container, LV_OPA_TRANSP, LV_PART_MAIN);
@@ -147,34 +370,48 @@ lv_obj_set_style_border_width(time_container, 0, LV_PART_MAIN);
 lv_obj_set_style_radius(time_container, 0, LV_PART_MAIN);
 lv_obj_set_style_pad_all(time_container, 0, LV_PART_MAIN);  // 无内边距
 
-// 统一字体（时间 & 日期）
-const lv_font_t * info_font = &lv_font_montserrat_20;
-
 // 时间显示
 label_time = lv_label_create(time_container);
-lv_label_set_text(label_time, "14:30:00");
-lv_obj_set_style_text_font(label_time, info_font, LV_PART_MAIN);
+// 从缓存恢复时间，如果有的话
+if(g_weather_state.initialized) {
+    lv_label_set_text_fmt(label_time, "%02d:%02d:%02d", 
+        g_weather_state.hour, g_weather_state.minute, g_weather_state.second);
+} else {
+    lv_label_set_text(label_time, "--:--:--");  // 等待天气API同步时间
+}
+obj_font_set(label_time, FONT_TYPE_NUMBER, 20);  // 使用数字字体
 lv_obj_set_style_text_color(label_time, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
 lv_obj_align(label_time, LV_ALIGN_TOP_RIGHT, -5,100);
 
 // 日期显示
 label_date = lv_label_create(time_container);
-lv_label_set_text(label_date, "2025-12-23");
-lv_obj_set_style_text_font(label_date, info_font, LV_PART_MAIN);
+// 从缓存恢复日期，如果有的话
+if(strlen(g_weather_state.date) > 0) {
+    lv_label_set_text(label_date, g_weather_state.date);
+} else {
+    lv_label_set_text(label_date, "----/--/--");  // 等待API同步
+}
+obj_font_set(label_date, FONT_TYPE_NUMBER, 20);  // 使用数字字体
 lv_obj_set_style_text_color(label_date, lv_color_hex(0xBDC3C7), LV_PART_MAIN);
 lv_obj_align(label_date, LV_ALIGN_TOP_RIGHT, -5, 130);
 
 // 星期显示
 label_week = lv_label_create(time_container);
-lv_label_set_text(label_week, "Monday");
-lv_obj_set_style_text_font(label_week, info_font, LV_PART_MAIN);
+// 从缓存恢复星期，如果有的话
+if(g_weather_state.initialized && g_weather_state.weekday >= 0 && g_weather_state.weekday <= 6) {
+    const char *weekday_names[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
+    lv_label_set_text(label_week, weekday_names[g_weather_state.weekday]);
+} else {
+    lv_label_set_text(label_week, "---");  // 等待API同步
+}
+obj_font_set(label_week, FONT_TYPE_CN, 20);  // 使用中文字体
 lv_obj_set_style_text_color(label_week, lv_color_hex(0xBDC3C7), LV_PART_MAIN);
 lv_obj_align(label_week, LV_ALIGN_TOP_RIGHT,-5, 150);
 
-/* ---------- 2.2 右侧：天气信息区 ---------- */
-lv_obj_t * weather_container = lv_obj_create(info_container);
+/* ========== 3. 天气信息区（独立容器）========== */
+lv_obj_t * weather_container = lv_obj_create(lv_scr_act());
 lv_obj_set_size(weather_container, 120, 280);    // 天气容器尺寸 120x280
-lv_obj_align(weather_container, LV_ALIGN_TOP_LEFT,120, 0);  // 左上角对齐,偏移120px
+lv_obj_align(weather_container, LV_ALIGN_TOP_LEFT, 400, 0);  // 位于时间容器右侧 (280+120=400)
 
 // 天气容器样式
 lv_obj_set_style_bg_opa(weather_container, LV_OPA_TRANSP, LV_PART_MAIN);
@@ -182,19 +419,49 @@ lv_obj_set_style_border_width(weather_container, 0, LV_PART_MAIN);
 lv_obj_set_style_radius(weather_container, 0, LV_PART_MAIN);
 lv_obj_set_style_pad_all(weather_container, 0, LV_PART_MAIN);  // 无内边距
 
-
-
-// 图标内符号（临时）
-lv_obj_t * icon_label = lv_label_create(weather_container);
-lv_label_set_text(icon_label, LV_SYMBOL_CALL);
-//lv_obj_set_style_text_font(icon_label, &lv_font_montserrat_28, LV_PART_MAIN);
-lv_obj_align(icon_label,LV_ALIGN_TOP_LEFT,15,100); 
+// 天气图标（使用PNG图片）
+icon_label = lv_img_create(weather_container);
+// 从缓存恢复天气图标，如果有的话
+if(g_weather_state.initialized && strlen(g_weather_state.weather_code) > 0) {
+    const char *icon_path = get_weather_icon(g_weather_state.weather_code);
+    lv_img_set_src(icon_label, icon_path);
+} else {
+    lv_img_set_src(icon_label, "A:res/image/start/weather_cloudy.png");  // 默认多云图标
+}
+lv_obj_set_size(icon_label,36,36);  // 设置图标大小
+lv_obj_align(icon_label, LV_ALIGN_TOP_LEFT, 15, 90); 
 
 //城市
-lv_obj_t * label_city = lv_label_create(weather_container);
-lv_label_set_text(label_city, "Beijing");
-lv_obj_set_style_text_font(label_city, info_font, LV_PART_MAIN);
+label_city = lv_label_create(weather_container);
+// 从缓存恢复城市，如果有的话
+if(strlen(g_weather_state.city) > 0) {
+    lv_label_set_text(label_city, g_weather_state.city);
+} else {
+    lv_label_set_text(label_city, "北京");  // 默认占位符
+}
+obj_font_set(label_city, FONT_TYPE_CN, 20);  // 使用中文字体
 lv_obj_set_style_text_color(label_city, lv_color_hex(0xECF0F1), LV_PART_MAIN);
+lv_obj_align(label_city, LV_ALIGN_TOP_LEFT,5,140);
+
+// 天气状态 + 温度
+label_weather = lv_label_create(weather_container);
+// 从缓存恢复天气数据，如果有的话
+if(g_weather_state.initialized && strlen(g_weather_state.weather) > 0) {
+    char weather_display[64];
+    snprintf(weather_display, sizeof(weather_display), "%s %s°C", 
+             g_weather_state.weather, g_weather_state.temperature);
+    lv_label_set_text(label_weather, weather_display);
+} else {
+    // 测试用随机天气（仅首次显示）
+    const char * weather_states[] = {"雾", "晴", "多云", "雨", "雪", "阴"};
+    int random_index = lv_rand(0, 5);
+    int random_temp  = lv_rand(15, 30);
+    lv_label_set_text_fmt(label_weather, "%s %d°C",
+                          weather_states[random_index], random_temp);
+}
+obj_font_set(label_weather, FONT_TYPE_CN, 20);  // 使用中文字体
+lv_obj_set_style_text_color(label_weather, lv_color_hex(0xECF0F1), LV_PART_MAIN);
+lv_obj_align(label_weather, LV_ALIGN_TOP_LEFT,5,160);
 lv_obj_align(label_city, LV_ALIGN_TOP_LEFT,5,140);
 
 // 天气状态 + 温度
@@ -208,7 +475,7 @@ int random_temp  = lv_rand(15, 30);
 lv_label_set_text_fmt(label_weather, "%s %d°C",
                       weather_states[random_index], random_temp);
 
-lv_obj_set_style_text_font(label_weather, info_font, LV_PART_MAIN);
+obj_font_set(label_weather, FONT_TYPE_CN, 20);  // 使用中文字体
 lv_obj_set_style_text_color(label_weather, lv_color_hex(0xECF0F1), LV_PART_MAIN);
 lv_obj_align(label_weather, LV_ALIGN_TOP_LEFT,5,160);
 

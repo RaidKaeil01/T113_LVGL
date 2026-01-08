@@ -92,6 +92,10 @@ int http_request_method(const char *host, const char *path,  const char *method,
     else
     {
         printf("Request failed: %s (%d)\n", curl_easy_strerror(code), code);
+        if (code == CURLE_COULDNT_RESOLVE_HOST) {
+            printf("⚠️  DNS resolution failed - Check network connection!\n");
+            printf("💡 Tip: Connect WiFi via Menu → WiFi Settings\n");
+        }
         free(response_data.data); // 失败时释放内存
     }
     // 资源清理
@@ -141,22 +145,75 @@ void parseWeatherData(const char *json_data) {
         cJSON_Delete(root);
         return;
     }
+    
+    // 安全获取字段（防止NULL指针）
+    cJSON *name_item = cJSON_GetObjectItem(location, "name");
+    cJSON *text_item = cJSON_GetObjectItem(now, "text");
+    cJSON *temp_item = cJSON_GetObjectItem(now, "temperature");
+    
+    if (!name_item || !text_item || !temp_item) {
+        fprintf(stderr, "Missing required weather fields.\n");
+        cJSON_Delete(root);
+        return;
+    }
+    
     // 打印 location 字段
-    printf("Location Name: %s\n", cJSON_GetObjectItem(location, "name")->valuestring);
+    printf("Location Name: %s\n", name_item->valuestring);
     // 打印 now 字段
-    printf("Current Weather: %s\n", cJSON_GetObjectItem(now, "text")->valuestring);
-    printf("Temperature: %s\n", cJSON_GetObjectItem(now, "temperature")->valuestring);
+    printf("Current Weather: %s\n", text_item->valuestring);
+    printf("Temperature: %s\n", temp_item->valuestring);
 
-    char weather_info[50];
-    memset(weather_info, 0, sizeof(weather_info));
-    strcat(weather_info, cJSON_GetObjectItem(location, "name")->valuestring);
-    strcat(weather_info, " ");
-    strcat(weather_info, cJSON_GetObjectItem(now, "text")->valuestring);
-    strcat(weather_info, " ");
-    strcat(weather_info, cJSON_GetObjectItem(now, "temperature")->valuestring);
-    strcat(weather_info, "°C");
-    if(weather_callback_func != NULL)
-        weather_callback_func(weather_info);
+    // 提取更多字段
+    cJSON *last_update = cJSON_GetObjectItem(result, "last_update");
+    cJSON *code_item = cJSON_GetObjectItem(now, "code");
+    
+    // 填充天气数据结构体
+    weather_data_t weather_data;
+    memset(&weather_data, 0, sizeof(weather_data));
+    
+    // 基本信息
+    strncpy(weather_data.city, name_item->valuestring, sizeof(weather_data.city) - 1);
+    strncpy(weather_data.weather, text_item->valuestring, sizeof(weather_data.weather) - 1);
+    strncpy(weather_data.temperature, temp_item->valuestring, sizeof(weather_data.temperature) - 1);
+    
+    // 天气代码
+    if (code_item && code_item->valuestring) {
+        strncpy(weather_data.code, code_item->valuestring, sizeof(weather_data.code) - 1);
+    }
+    
+    // 更新时间和日期解析
+    if (last_update && last_update->valuestring) {
+        strncpy(weather_data.update_time, last_update->valuestring, sizeof(weather_data.update_time) - 1);
+        
+        // 从"2026-01-08T11:47:24+08:00"提取日期和时间
+        int year, month, day, hour, min, sec;
+        if (sscanf(last_update->valuestring, "%d-%d-%dT%d:%d:%d", 
+                   &year, &month, &day, &hour, &min, &sec) == 6) {
+            // 格式化日期
+            snprintf(weather_data.date, sizeof(weather_data.date), "%04d-%02d-%02d", year, month, day);
+            
+            // 格式化时间
+            snprintf(weather_data.update_time, sizeof(weather_data.update_time), "%02d:%02d:%02d", hour, min, sec);
+            
+            // 计算星期（Zeller公式）
+            if (month < 3) {
+                month += 12;
+                year -= 1;
+            }
+            int c = year / 100;
+            int y = year % 100;
+            int w = (y + y/4 + c/4 - 2*c + (26*(month+1))/10 + day - 1) % 7;
+            weather_data.weekday = (w + 7) % 7;  // 确保非负
+            
+            printf("✅ Date: %s, Weekday: %d\n", weather_data.date, weather_data.weekday);
+        }
+    }
+    
+    // 回调通知
+    if(weather_callback_func != NULL) {
+        weather_callback_func(&weather_data);
+    }
+    
     cJSON_Delete(root);
 }
 

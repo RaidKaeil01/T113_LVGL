@@ -13,4 +13,6 @@ void init_pageClock(void);
 void cleanup_pageClock(void);
 void init_page_setting(void);
 void cleanup_page_setting(void);
+void init_pageMusic(void);
+void cleanup_pageMusic(void);
 #endif

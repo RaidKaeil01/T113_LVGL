@@ -15,13 +15,17 @@ aux_source_directory(. SOURCES)
 aux_source_directory(wifi WIFI_SOURCES)
 # 添加 net 子目录的源文件
 aux_source_directory(net NET_SOURCES)
+# 添加 music 子目录的源文件
+aux_source_directory(music MUSIC_SOURCES)
 # 生成名称为demo7的可执行文件
-add_executable(demo7 ${SOURCES} ${WIFI_SOURCES} ${NET_SOURCES})
+add_executable(demo7 ${SOURCES} ${WIFI_SOURCES} ${NET_SOURCES} ${MUSIC_SOURCES})
 # 引入头文件路径
 target_include_directories(demo7 PRIVATE
                                 ./
                                 ./wifi
                                 ./net
+                                ./music
+                                ./osal
                                 res/
                                 res/font/
                                 res/image/
@@ -30,6 +34,7 @@ target_include_directories(demo7 PRIVATE
                                 ${CMAKE_SOURCE_DIR}/component/osal
                                 ${CMAKE_SOURCE_DIR}/lvgl
                                 ${CMAKE_SOURCE_DIR}/component/wifi
+                                ${CMAKE_SOURCE_DIR}/component/player
                                 )
 # 引入依赖库 
 target_link_libraries(demo7 PRIVATE
@@ -44,6 +49,7 @@ target_link_libraries(demo7 PRIVATE
                         crypto
                         nghttp2
                         pthread
+                        player
                         )
 # 当使用 PRIVATE 关键字时，表示所链接的库仅用于当前目标的实现，而不会传递给依赖该目标的其他目标。
 # 换句话说：
