@@ -15,4 +15,8 @@ void init_page_setting(void);
 void cleanup_page_setting(void);
 void init_pageMusic(void);
 void cleanup_pageMusic(void);
+void init_pageNotebook(void);
+void cleanup_pageNotebook(void);
+void init_pageInformation(void);
+void cleanup_pageInformation(void);
 #endif

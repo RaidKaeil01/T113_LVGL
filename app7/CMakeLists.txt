@@ -17,8 +17,14 @@ aux_source_directory(wifi WIFI_SOURCES)
 aux_source_directory(net NET_SOURCES)
 # 添加 music 子目录的源文件
 aux_source_directory(music MUSIC_SOURCES)
+# 添加 file 子目录的源文件
+aux_source_directory(file FILE_SOURCES)
+# 添加 file/file 子目录的源文件（原子文件操作）
+aux_source_directory(file/file FILE_ATOMIC_SOURCES)
+# 添加 page_information 子目录的源文件
+aux_source_directory(page_information PAGE_INFO_SOURCES)
 # 生成名称为demo7的可执行文件
-add_executable(demo7 ${SOURCES} ${WIFI_SOURCES} ${NET_SOURCES} ${MUSIC_SOURCES})
+add_executable(demo7 ${SOURCES} ${WIFI_SOURCES} ${NET_SOURCES} ${MUSIC_SOURCES} ${FILE_SOURCES} ${FILE_ATOMIC_SOURCES} ${PAGE_INFO_SOURCES})
 # 引入头文件路径
 target_include_directories(demo7 PRIVATE
                                 ./
@@ -26,6 +32,8 @@ target_include_directories(demo7 PRIVATE
                                 ./net
                                 ./music
                                 ./osal
+                                ./file
+                                ./page_information
                                 res/
                                 res/font/
                                 res/image/
@@ -35,6 +43,7 @@ target_include_directories(demo7 PRIVATE
                                 ${CMAKE_SOURCE_DIR}/lvgl
                                 ${CMAKE_SOURCE_DIR}/component/wifi
                                 ${CMAKE_SOURCE_DIR}/component/player
+                                ${CMAKE_SOURCE_DIR}/component/hal
                                 )
 # 引入依赖库 
 target_link_libraries(demo7 PRIVATE
@@ -50,6 +59,7 @@ target_link_libraries(demo7 PRIVATE
                         nghttp2
                         pthread
                         player
+                        lvgl_porting
                         )
 # 当使用 PRIVATE 关键字时，表示所链接的库仅用于当前目标的实现，而不会传递给依赖该目标的其他目标。
 # 换句话说：

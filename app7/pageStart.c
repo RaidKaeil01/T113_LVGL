@@ -6,6 +6,7 @@
 #include "image_conf.h"
 #include "font_conf.h"  // 引入中文字体配置
 #include "net/http_manager.h"  // 引入天气数据结构体定义
+#include "ui_msg.h"  // 引入UI消息队列
 
 /* ========== 全局变量 ========== */
 // 时间显示标签
@@ -137,12 +138,13 @@ static const char* get_weather_icon(const char *code) {
 }
 
 /**
- * @brief 天气数据回调函数
+ * @brief 天气数据回调函数（网络线程调用）
  * @param data 天气数据结构体指针
- * @note 由http_manager的网络线程调用，更新pageStart界面的天气信息
+ * @note ⚠️ 此函数在网络线程中运行！
+ *       不能直接操作LVGL，只能发送消息到UI队列
  */
 void pageStart_weather_callback(weather_data_t *data) {
-    printf("\n========== 天气数据回调 ==========\n");
+    printf("\n========== 天气数据回调（网络线程） ==========\n");
     printf("接收到天气信息:\n");
     printf("  城市: %s\n", data->city);
     printf("  天气: %s\n", data->weather);
@@ -153,35 +155,65 @@ void pageStart_weather_callback(weather_data_t *data) {
     printf("  更新时间: %s\n", data->update_time);
     printf("=================================\n\n");
     
+    /* ========== 构造UI消息并发送 ========== */
+    ui_msg_t msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.type = UI_MSG_WEATHER_OK;
+    
+    // 复制天气数据到消息
+    strncpy(msg.data.weather.city, data->city, sizeof(msg.data.weather.city) - 1);
+    strncpy(msg.data.weather.weather, data->weather, sizeof(msg.data.weather.weather) - 1);
+    strncpy(msg.data.weather.temperature, data->temperature, sizeof(msg.data.weather.temperature) - 1);
+    strncpy(msg.data.weather.code, data->code, sizeof(msg.data.weather.code) - 1);
+    strncpy(msg.data.weather.update_time, data->update_time, sizeof(msg.data.weather.update_time) - 1);
+    strncpy(msg.data.weather.date, data->date, sizeof(msg.data.weather.date) - 1);
+    msg.data.weather.weekday = data->weekday;
+    
+    // 发送消息到UI队列（线程安全）
+    if (ui_msg_send(&msg) == 0) {
+        printf("📤 天气消息已发送到UI队列\n\n");
+    } else {
+        printf("❌ 天气消息发送失败\n\n");
+    }
+}
+
+/**
+ * @brief 更新天气UI显示（主线程调用）
+ * @param weather 天气数据指针
+ * @note ⚠️ 此函数只能在主线程中调用！
+ */
+static void update_weather_ui(ui_weather_data_t *weather) {
+    printf("\n========== 更新天气UI（主线程） ==========\n");
+    
     /* ========== 第一步：保存数据到全局缓存 ========== */
     // 保存日期
-    if(strlen(data->date) > 0) {
-        strncpy(g_weather_state.date, data->date, sizeof(g_weather_state.date) - 1);
+    if(strlen(weather->date) > 0) {
+        strncpy(g_weather_state.date, weather->date, sizeof(g_weather_state.date) - 1);
         g_weather_state.date[sizeof(g_weather_state.date) - 1] = '\0';
     }
     
     // 保存星期
-    g_weather_state.weekday = data->weekday;
+    g_weather_state.weekday = weather->weekday;
     
     // 保存城市
-    strncpy(g_weather_state.city, data->city, sizeof(g_weather_state.city) - 1);
+    strncpy(g_weather_state.city, weather->city, sizeof(g_weather_state.city) - 1);
     g_weather_state.city[sizeof(g_weather_state.city) - 1] = '\0';
     
     // 保存天气状态
-    strncpy(g_weather_state.weather, data->weather, sizeof(g_weather_state.weather) - 1);
+    strncpy(g_weather_state.weather, weather->weather, sizeof(g_weather_state.weather) - 1);
     g_weather_state.weather[sizeof(g_weather_state.weather) - 1] = '\0';
     
     // 保存温度
-    strncpy(g_weather_state.temperature, data->temperature, sizeof(g_weather_state.temperature) - 1);
+    strncpy(g_weather_state.temperature, weather->temperature, sizeof(g_weather_state.temperature) - 1);
     g_weather_state.temperature[sizeof(g_weather_state.temperature) - 1] = '\0';
     
     // 保存天气代码
-    strncpy(g_weather_state.weather_code, data->code, sizeof(g_weather_state.weather_code) - 1);
+    strncpy(g_weather_state.weather_code, weather->code, sizeof(g_weather_state.weather_code) - 1);
     g_weather_state.weather_code[sizeof(g_weather_state.weather_code) - 1] = '\0';
     
     // 保存时间（仅首次）
-    if(!g_weather_state.initialized && strlen(data->update_time) > 0) {
-        if(sscanf(data->update_time, "%d:%d:%d", 
+    if(!g_weather_state.initialized && strlen(weather->update_time) > 0) {
+        if(sscanf(weather->update_time, "%d:%d:%d", 
                   &g_weather_state.hour, 
                   &g_weather_state.minute, 
                   &g_weather_state.second) == 3) {
@@ -189,13 +221,13 @@ void pageStart_weather_callback(weather_data_t *data) {
             printf("✅ 时间已从天气API同步: %02d:%02d:%02d\n", 
                    g_weather_state.hour, g_weather_state.minute, g_weather_state.second);
         } else {
-            printf("⚠️  时间解析失败: %s\n", data->update_time);
+            printf("⚠️  时间解析失败: %s\n", weather->update_time);
         }
     }
     
     printf("💾 数据已保存到全局缓存\n\n");
     
-    /* ========== 第二步：更新UI显示 ========== */
+    /* ========== 第二步：更新UI显示（仅主线程可执行） ========== */
     // 更新日期
     if(label_date != NULL && strlen(g_weather_state.date) > 0) {
         lv_label_set_text(label_date, g_weather_state.date);
@@ -239,6 +271,56 @@ void pageStart_weather_callback(weather_data_t *data) {
             g_weather_state.hour, g_weather_state.minute, g_weather_state.second);
         printf("✅ 时间标签已更新: %02d:%02d:%02d\n", 
                g_weather_state.hour, g_weather_state.minute, g_weather_state.second);
+    }
+    
+    printf("=================================\n\n");
+}
+
+/**
+ * @brief UI消息处理函数（主线程调用）
+ * @param msg UI消息指针
+ * @note ⚠️ 此函数是唯一能操作LVGL的地方！必须在主线程调用
+ */
+void ui_msg_handle(ui_msg_t *msg) {
+    if (msg == NULL) return;
+    
+    switch (msg->type) {
+        case UI_MSG_WEATHER_OK:
+            printf("📥 处理天气消息: UI_MSG_WEATHER_OK\n");
+            update_weather_ui(&msg->data.weather);
+            break;
+            
+        case UI_MSG_WEATHER_FAIL:
+            printf("📥 处理天气消息: UI_MSG_WEATHER_FAIL\n");
+            if (label_weather != NULL) {
+                lv_label_set_text(label_weather, "获取失败");
+            }
+            break;
+            
+        case UI_MSG_WIFI_CONNECTED:
+            printf("📥 处理WiFi消息: UI_MSG_WIFI_CONNECTED\n");
+            if (label_status != NULL) {
+                lv_label_set_text(label_status, "WiFi已连接");
+            }
+            break;
+            
+        case UI_MSG_WIFI_DISCONNECTED:
+            printf("📥 处理WiFi消息: UI_MSG_WIFI_DISCONNECTED\n");
+            if (label_status != NULL) {
+                lv_label_set_text(label_status, "WiFi未连接");
+            }
+            break;
+            
+        case UI_MSG_NETWORK_ERROR:
+            printf("📥 处理网络消息: UI_MSG_NETWORK_ERROR\n");
+            if (label_weather != NULL) {
+                lv_label_set_text(label_weather, "网络错误");
+            }
+            break;
+            
+        default:
+            printf("⚠️  未知消息类型: %d\n", msg->type);
+            break;
     }
 }
 

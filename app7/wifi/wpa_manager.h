@@ -11,6 +11,10 @@
 #define STA_IFNAME  "wlan0"  // WiFi网卡名称
 #define STA_CONFIG_PATH "/etc/wifi/wpa_supplicant/wpa_supplicant.conf"  // wpa配置文件路径
 
+/* ========== 默认WiFi配置（可修改） ========== */
+#define DEFAULT_WIFI_SSID   "Hunexi-2.4G"   // 默认WiFi名称
+#define DEFAULT_WIFI_PSW    "D123457890"     // 默认WiFi密码
+
 /* ========== 枚举类型 ========== */
 /**
  * @brief WiFi连接状态枚举

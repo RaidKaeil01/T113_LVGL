@@ -1,9 +1,32 @@
       
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "lvgl.h"
 #include "image_conf.h"
 #include "font_conf.h"
 #include "page_conf.h"
+
+/* ========== 硬件控制函数 ========== */
+/**
+ * @brief 设置屏幕背光亮度
+ * @param value 亮度值 0-100（百分比）
+ */
+static void em_hal_brightness_set_value(int value)
+{
+    char cmd[128];
+    
+    // 边界检查
+    if (value < 0) value = 0;
+    if (value > 100) value = 100;
+    
+    // 0-100的值映射到0-200（硬件亮度范围）
+    int brightness = 200 * value / 100;
+    printf("Setting brightness: %d%% -> hardware value: %d\n", value, brightness);
+    
+    snprintf(cmd, sizeof(cmd), "echo %d > /sys/class/backlight/backlight/brightness", brightness);
+    system(cmd);
+}
 
 //声明通用样式
 static lv_style_t com_style;
@@ -104,22 +127,58 @@ typedef struct
     int value;
 }system_setting_info_t;
 
+/* ========== 设置值记忆（静态变量，程序运行期间保持） ========== */
+static int g_brightness_value = 50;  // 默认亮度50%
+static int g_volume_value = 50;      // 默认音量50%
+
 static system_setting_info_t info[2] = {
-    {0,GET_IMAGE_PATH("icon_brightness.png"),"亮度",0},
-    {1,GET_IMAGE_PATH("icon_volume.png"),"音量",0},
+    {0, GET_IMAGE_PATH("icon_brightness.png"), "亮度", 0},  // value将在初始化时设置
+    {1, GET_IMAGE_PATH("icon_volume.png"), "音量", 0},
 };
+
+// 滑动条类型标识
+#define SLIDER_TYPE_BRIGHTNESS  0
+#define SLIDER_TYPE_VOLUME      1
+
+// 滑动条用户数据结构
+typedef struct {
+    lv_obj_t *label;    // 显示百分比的标签
+    int type;           // 滑动条类型（亮度/音量）
+} slider_user_data_t;
+
+static slider_user_data_t slider_data[2];  // 存储两个滑动条的数据
 
 static void slider_event_cb(lv_event_t * e)
 {
     lv_obj_t * slider = lv_event_get_target(e);
     int value = (int)lv_slider_get_value(slider);
-    lv_obj_t *label = (lv_obj_t *)lv_event_get_user_data(e);
-    lv_label_set_text_fmt(label,"%d%%",value);
-    //重新对齐，避免数值不同不能居中
-    lv_obj_align_to(label,slider,LV_ALIGN_OUT_RIGHT_MID,15,-5);
+    slider_user_data_t *data = (slider_user_data_t *)lv_event_get_user_data(e);
+    
+    // 更新标签显示
+    lv_label_set_text_fmt(data->label, "%d%%", value);
+    // 重新对齐，避免数值不同不能居中
+    lv_obj_align_to(data->label, slider, LV_ALIGN_OUT_RIGHT_MID, 15, -5);
+    
+    // 根据类型执行对应的硬件控制
+    switch(data->type) {
+        case SLIDER_TYPE_BRIGHTNESS:
+            g_brightness_value = value;  // 保存当前亮度值
+            em_hal_brightness_set_value(value);  // 调用背光设置函数
+            break;
+        case SLIDER_TYPE_VOLUME:
+            g_volume_value = value;  // 保存当前音量值
+            // TODO: 调用音量设置函数
+            printf("Setting volume: %d%%\n", value);
+            break;
+        default:
+            break;
+    }
 }
 
 static lv_obj_t * init_slider_view(lv_obj_t *parent,int type){
+    // 从静态变量获取当前值
+    int current_value = (type == SLIDER_TYPE_BRIGHTNESS) ? g_brightness_value : g_volume_value;
+    
     lv_obj_t * cont = lv_obj_create(parent);
     lv_obj_set_size(cont,LV_SIZE_CONTENT,LV_SIZE_CONTENT);
     lv_obj_add_style(cont,&com_style,LV_PART_MAIN);
@@ -135,15 +194,19 @@ static lv_obj_t * init_slider_view(lv_obj_t *parent,int type){
     lv_obj_set_style_text_color(label_name,lv_color_hex(0xffffff),LV_PART_MAIN);
 
     lv_obj_t * slider = lv_slider_create(cont);
+    lv_slider_set_value(slider, current_value, LV_ANIM_OFF);  // 设置滑动条初始值
     lv_obj_align_to(slider,label_name,LV_ALIGN_OUT_RIGHT_MID,37,5);
 
     lv_obj_t *label_value = lv_label_create(cont);
     obj_font_set(label_value,FONT_TYPE_CN,24);
-    lv_label_set_text_fmt(label_value, "%d%%",info[type].value);
+    lv_label_set_text_fmt(label_value, "%d%%", current_value);  // 显示当前值
     lv_obj_align_to(label_value,slider,LV_ALIGN_OUT_RIGHT_MID,15,-5);
     lv_obj_set_style_text_color(label_value,lv_color_hex(0xffffff),LV_PART_MAIN);
 
-    lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, (void *)label_value);
+    // 设置滑动条用户数据（包含标签和类型）
+    slider_data[type].label = label_value;
+    slider_data[type].type = type;
+    lv_obj_add_event_cb(slider, slider_event_cb, LV_EVENT_VALUE_CHANGED, &slider_data[type]);
 
     return cont;
 }

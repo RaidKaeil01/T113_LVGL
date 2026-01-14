@@ -354,7 +354,7 @@ static void* net_thread_fun(void *arg)
     int ret = OSAL_ERROR;
     net_obj obj;
     memset(&obj, 0, sizeof(net_obj));
-    char *response_json_str;
+    char *response_json_str = NULL;  // ⚠️ 必须初始化为NULL，避免野指针
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
     pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
     while(1)
@@ -367,10 +367,14 @@ static void* net_thread_fun(void *arg)
             {
                 case NET_GET_WEATHER:
                     printf("handle NET_GET_WEATHER\n");
-                    http_request_method(obj.host,obj.path,obj.type,obj.data,&response_json_str);
-                    if (response_json_str != NULL){
+                    response_json_str = NULL;  // 每次请求前重置为NULL
+                    int http_ret = http_request_method(obj.host,obj.path,obj.type,obj.data,&response_json_str);
+                    if (http_ret == 0 && response_json_str != NULL){
                         parseWeatherData(response_json_str);
                         free(response_json_str);
+                        response_json_str = NULL;
+                    } else {
+                        printf("❌ Weather request failed (ret=%d), skipping parse\n", http_ret);
                     }
                     break;
                 default:

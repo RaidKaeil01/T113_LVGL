@@ -2,7 +2,7 @@
 #include <string.h>
 #include "lvgl.h"
 #include "page_conf.h"
-
+//图标大小110*110
 /* ========== 全局变量 ========== */
 // 通用样式
 static lv_style_t com_style;
@@ -110,6 +110,30 @@ static void menu_click_event_cb(lv_event_t * e)
         // 切换到音乐页面
         init_pageMusic();
     }
+    else if(strcmp(menu_name, "Notebook") == 0) {
+        printf("Switching to Notebook page\n");
+        
+        // 清理当前页面资源
+        cleanup_pageMenu();
+        
+        // 清空屏幕
+        lv_obj_clean(lv_scr_act());
+        
+        // 切换到记事本页面
+        init_pageNotebook();
+    }
+    else if(strcmp(menu_name, "Information") == 0) {
+        printf("Switching to Information page\n");
+        
+        // 清理当前页面资源
+        cleanup_pageMenu();
+        
+        // 清空屏幕
+        lv_obj_clean(lv_scr_act());
+        
+        // 切换到信息页面
+        init_pageInformation();
+    }
 }
 
 /**
@@ -207,8 +231,11 @@ static lv_obj_t * init_menu_list(lv_obj_t *parent)
     // 初始化菜单 - 信息
     init_item(cont, "A:res/image/menu/menu_information.png", "Information");
 
-       // 初始化菜单 - 游戏
+    // 初始化菜单 - 游戏
     init_item(cont, "A:res/image/menu/menu_game.png", "Game");
+    
+    // 初始化菜单 - 记事本
+    init_item(cont, "A:res/image/menu/menu_notebook.png", "Notebook");
     
     
     // TODO: 后续添加更多菜单项

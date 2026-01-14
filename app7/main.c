@@ -8,6 +8,7 @@
 #include "lv_demos.h"
 #include "net/http_manager.h"
 #include "wifi/wpa_manager.h"
+#include "ui_msg.h"  // 引入UI消息队列
 
 extern void lv_port_disp_init(bool is_disp_orientation);
 extern void lv_port_indev_init(void);
@@ -39,6 +40,13 @@ int main() {
    // init_pageStart();//启动页面初始化
    // init_pageWifi();//WiFi页面初始化
     
+    /* ========== 初始化UI消息队列（线程安全通信） ========== */
+    printf("🔧 Initializing UI message queue...\n");
+    if (ui_msg_init() != 0) {
+        printf("❌ Failed to initialize UI message queue!\n");
+        return -1;
+    }
+    
     /* ========== 先初始化界面（避免阻塞） ========== */
     init_pageStart();
     
@@ -54,10 +62,11 @@ int main() {
         printf("✅ WiFi manager thread started\n\n");
         
         // 尝试连接初始WiFi（非阻塞，仅发起连接命令）
+        // 💡 修改默认WiFi请编辑: wifi/wpa_manager.h 中的 DEFAULT_WIFI_SSID 和 DEFAULT_WIFI_PSW
         wpa_ctrl_wifi_info_t default_wifi;
         memset(&default_wifi, 0, sizeof(default_wifi));
-        strncpy(default_wifi.ssid, "Hunexi-2.4G", sizeof(default_wifi.ssid) - 1);
-        strncpy(default_wifi.psw, "D12345789", sizeof(default_wifi.psw) - 1);
+        strncpy(default_wifi.ssid, DEFAULT_WIFI_SSID, sizeof(default_wifi.ssid) - 1);
+        strncpy(default_wifi.psw, DEFAULT_WIFI_PSW, sizeof(default_wifi.psw) - 1);
         
         // 只发起连接命令，不等待结果（立即返回）
         wpa_manager_auto_connect_default_wifi(&default_wifi, 0);
@@ -76,9 +85,21 @@ int main() {
    //init_pageClock();
    //init_page_setting();
    
+    /* ========== 主循环（UI线程） ========== */
+    printf("🚀 Entering main loop (UI thread)...\n\n");
+    ui_msg_t msg;
+    
     while (1) {
+        // 1. 处理LVGL任务
         lv_task_handler();
-        //延时，保证cpu占有率不会过高
+        
+        // 2. 处理UI消息队列（非阻塞）
+        //    ⚠️ 这是唯一操作LVGL的地方（主线程）
+        while (ui_msg_recv(&msg) == 0) {
+            ui_msg_handle(&msg);
+        }
+        
+        // 3. 延时，保证cpu占有率不会过高
         usleep(1000);
     }
     return 0;
