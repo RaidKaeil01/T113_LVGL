@@ -21,10 +21,17 @@ aux_source_directory(music MUSIC_SOURCES)
 aux_source_directory(file FILE_SOURCES)
 # 添加 file/file 子目录的源文件（原子文件操作）
 aux_source_directory(file/file FILE_ATOMIC_SOURCES)
+# 添加 file/SQL 子目录的源文件（日志系统，暂时排除event_log.c）
+set(LOG_SYSTEM_SOURCES
+    file/SQL/system_log.c
+    file/SQL/text_log.c
+    file/SQL/ram_log.c
+    # file/SQL/event_log.c  # 需要SQLite3交叉编译库，暂时禁用
+)
 # 添加 page_information 子目录的源文件
 aux_source_directory(page_information PAGE_INFO_SOURCES)
 # 生成名称为demo7的可执行文件
-add_executable(demo7 ${SOURCES} ${WIFI_SOURCES} ${NET_SOURCES} ${MUSIC_SOURCES} ${FILE_SOURCES} ${FILE_ATOMIC_SOURCES} ${PAGE_INFO_SOURCES})
+add_executable(demo7 ${SOURCES} ${WIFI_SOURCES} ${NET_SOURCES} ${MUSIC_SOURCES} ${FILE_SOURCES} ${FILE_ATOMIC_SOURCES} ${LOG_SYSTEM_SOURCES} ${PAGE_INFO_SOURCES})
 # 引入头文件路径
 target_include_directories(demo7 PRIVATE
                                 ./
@@ -33,6 +40,7 @@ target_include_directories(demo7 PRIVATE
                                 ./music
                                 ./osal
                                 ./file
+                                ./file/SQL
                                 ./page_information
                                 res/
                                 res/font/
@@ -60,6 +68,7 @@ target_link_libraries(demo7 PRIVATE
                         pthread
                         player
                         lvgl_porting
+                        # sqlite3  # 暂时禁用，等交叉编译环境配置好再启用
                         )
 # 当使用 PRIVATE 关键字时，表示所链接的库仅用于当前目标的实现，而不会传递给依赖该目标的其他目标。
 # 换句话说：
