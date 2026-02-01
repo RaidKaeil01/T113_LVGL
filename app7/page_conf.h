@@ -19,4 +19,6 @@ void init_pageNotebook(void);
 void cleanup_pageNotebook(void);
 void init_pageInformation(void);
 void cleanup_pageInformation(void);
+void init_pageMicrophone(void);
+void cleanup_pageMicrophone(void);
 #endif

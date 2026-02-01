@@ -414,10 +414,14 @@ static void time_update_timer_cb(lv_timer_t * timer)
  */
 void init_pageStart(void)
 {
+    printf("🔹 [DEBUG] init_pageStart() ENTER\n");
+    
     /* ========== 0. 设置屏幕背景颜色 ========== */
+    printf("🔹 [DEBUG] Step 0: Setting background color\n");
     lv_obj_set_style_bg_color(lv_scr_act(), lv_color_hex(0x000000), LV_PART_MAIN);  // 黑色背景
     
     /* ========== 1. 头像区域（左上角）========== */
+    printf("🔹 [DEBUG] Step 1: Creating avatar container\n");
     lv_obj_t * avatar_container = lv_obj_create(lv_scr_act());
     lv_obj_set_size(avatar_container,280, 280);  // 头像容器大小
     lv_obj_align(avatar_container, LV_ALIGN_TOP_LEFT,0, 0);  // 左上角，偏移0
@@ -428,11 +432,14 @@ void init_pageStart(void)
     lv_obj_set_style_pad_all(avatar_container, 0, LV_PART_MAIN);  // 无内边距
     
     // 创建头像图片对象（用户需自行添加图片路径）
+    printf("🔹 [DEBUG] Step 1.1: Creating avatar image\n");
     lv_obj_t * img_avatar = lv_img_create(avatar_container);
     // TODO: 用户添加头像图片路径，例如：
+    printf("🔹 [DEBUG] Step 1.2: Loading watch1.png\n");
     lv_img_set_src(img_avatar, "A:res/image/start/watch1.png");
     // 或使用图片数组：lv_img_set_src(img_avatar, &avatar_img);
     lv_obj_center(img_avatar);  // 头像居中
+    printf("🔹 [DEBUG] Step 1.3: Avatar loaded successfully\n");
     
     // // 临时占位标签（实际使用时可删除）- 位于头像右侧的侧
     // lv_obj_t * label_avatar_placeholder = lv_label_create(lv_scr_act());
@@ -442,6 +449,7 @@ void init_pageStart(void)
     
     
     /* ========== 2. 时间显示区（独立容器）========== */
+printf("🔹 [DEBUG] Step 2: Creating time container\n");
 lv_obj_t * time_container = lv_obj_create(lv_scr_act());
 lv_obj_set_size(time_container, 120, 280);       // 时间容器尺寸 120x280
 lv_obj_align(time_container, LV_ALIGN_TOP_LEFT, 280, 0);  // 紧挨着头像容器右侧

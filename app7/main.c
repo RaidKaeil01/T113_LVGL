@@ -51,36 +51,39 @@ int main() {
     init_pageStart();
     
     /* ========== 网络模块初始化（后台异步） ========== */
-    http_request_create();  // HTTP模块初始化
-    http_set_weather_callback(pageStart_weather_callback);  // 注册pageStart天气回调
+    // 临时禁用网络功能进行测试
+    printf("⚠️  Network modules temporarily disabled for testing\n");
     
-    // T113嵌入式环境：后台初始化WiFi（非阻塞）
-    printf("📱 Running on T113, initializing WiFi in background...\n");
+    // http_request_create();  // HTTP模块初始化
+    // http_set_weather_callback(pageStart_weather_callback);  // 注册pageStart天气回调
     
-    // 后台启动WiFi管理器（不阻塞主线程）
-    if (wpa_manager_open() == 0) {
-        printf("✅ WiFi manager thread started\n\n");
-        
-        // 尝试连接初始WiFi（非阻塞，仅发起连接命令）
-        // 💡 修改默认WiFi请编辑: wifi/wpa_manager.h 中的 DEFAULT_WIFI_SSID 和 DEFAULT_WIFI_PSW
-        wpa_ctrl_wifi_info_t default_wifi;
-        memset(&default_wifi, 0, sizeof(default_wifi));
-        strncpy(default_wifi.ssid, DEFAULT_WIFI_SSID, sizeof(default_wifi.ssid) - 1);
-        strncpy(default_wifi.psw, DEFAULT_WIFI_PSW, sizeof(default_wifi.psw) - 1);
-        
-        // 只发起连接命令，不等待结果（立即返回）
-        wpa_manager_auto_connect_default_wifi(&default_wifi, 0);
-        
-        printf("💡 Tip: Connection result will be shown in console\n");
-        printf("   - Weather will auto-update after WiFi connected\n");
-        printf("   - Or use Menu → WiFi Settings to connect manually\n\n");
-    } else {
-        printf("❌ Failed to start WiFi manager\n\n");
-    }
+    // // T113嵌入式环境：后台初始化WiFi（非阻塞）
+    // printf("📱 Running on T113, initializing WiFi in background...\n");
     
-    // 立即发送天气请求（异步队列，不阻塞）
-    // WiFi连接成功后会自动执行
-    http_get_weather_async("SPhQ7CZNrk6Rzn8_H", "成都");
+    // // 后台启动WiFi管理器（不阻塞主线程）
+    // if (wpa_manager_open() == 0) {
+    //     printf("✅ WiFi manager thread started\n\n");
+    //     
+    //     // 尝试连接初始WiFi（非阻塞，仅发起连接命令）
+    //     // 💡 修改默认WiFi请编辑: wifi/wpa_manager.h 中的 DEFAULT_WIFI_SSID 和 DEFAULT_WIFI_PSW
+    //     wpa_ctrl_wifi_info_t default_wifi;
+    //     memset(&default_wifi, 0, sizeof(default_wifi));
+    //     strncpy(default_wifi.ssid, DEFAULT_WIFI_SSID, sizeof(default_wifi.ssid) - 1);
+    //     strncpy(default_wifi.psw, DEFAULT_WIFI_PSW, sizeof(default_wifi.psw) - 1);
+    //     
+    //     // 只发起连接命令，不等待结果（立即返回）
+    //     wpa_manager_auto_connect_default_wifi(&default_wifi, 0);
+    //     
+    //     printf("💡 Tip: Connection result will be shown in console\n");
+    //     printf("   - Weather will auto-update after WiFi connected\n");
+    //     printf("   - Or use Menu → WiFi Settings to connect manually\n\n");
+    // } else {
+    //     printf("❌ Failed to start WiFi manager\n\n");
+    // }
+    
+    // // 立即发送天气请求（异步队列，不阻塞）
+    // // WiFi连接成功后会自动执行
+    // http_get_weather_async("SPhQ7CZNrk6Rzn8_H", "成都");
    // init_pageMenu();
    //init_pageClock();
    //init_page_setting();

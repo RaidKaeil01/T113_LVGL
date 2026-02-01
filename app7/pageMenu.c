@@ -122,6 +122,18 @@ static void menu_click_event_cb(lv_event_t * e)
         // 切换到记事本页面
         init_pageNotebook();
     }
+    else if(strcmp(menu_name, "Recorder") == 0) {
+        printf("Switching to Recorder page\n");
+        
+        // 清理当前页面资源
+        cleanup_pageMenu();
+        
+        // 清空屏幕
+        lv_obj_clean(lv_scr_act());
+        
+        // 切换到录音页面
+        init_pageMicrophone();
+    }
     else if(strcmp(menu_name, "Information") == 0) {
         printf("Switching to Information page\n");
         
@@ -236,6 +248,9 @@ static lv_obj_t * init_menu_list(lv_obj_t *parent)
     
     // 初始化菜单 - 记事本
     init_item(cont, "A:res/image/menu/menu_notebook.png", "Notebook");
+    
+    // 初始化菜单 - 录音
+    init_item(cont, "A:res/image/menu/microphone.png", "Recorder");
     
     
     // TODO: 后续添加更多菜单项

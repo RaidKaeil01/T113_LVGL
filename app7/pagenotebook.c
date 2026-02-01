@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>  // free函数
 #include <sys/stat.h>
 #include <dirent.h>  // 目录操作
 #include <unistd.h>  // access函数
@@ -20,11 +21,78 @@ static lv_obj_t *keyboard = NULL;  // 虚拟键盘
 static lv_obj_t *content_cont = NULL;  // 内容区容器
 static lv_obj_t *history_msgbox = NULL;  // 历史记录弹窗
 static lv_obj_t *saveas_msgbox = NULL;  // 另存弹窗
+static lv_obj_t *toast_label = NULL;  // Toast提示标签
+static lv_timer_t *toast_timer = NULL;  // Toast定时器
+static lv_obj_t *filename_textarea = NULL;  // 文件名输入框
 static char notebook_content[1024] = {0};  // 记事本内容缓存
 static bool keyboard_visible = false;  // 键盘显示状态标志
 
 /* ========== 函数前向声明 ========== */
 static void switch_btn_event_cb(lv_event_t * e);
+static void obj_font_set(lv_obj_t *obj, int type, uint16_t weight);
+
+/**
+ * @brief Toast定时器回调 - 自动隐藏提示
+ */
+static void toast_timer_cb(lv_timer_t * timer)
+{
+    if(toast_label != NULL) {
+        lv_obj_del(toast_label);
+        toast_label = NULL;
+    }
+    
+    if(toast_timer != NULL) {
+        lv_timer_del(toast_timer);
+        toast_timer = NULL;
+    }
+}
+
+/**
+ * @brief 显示Toast提示
+ * @param message 提示内容
+ * @param success true=成功(绿色), false=失败(红色)
+ */
+static void show_toast(const char *message, bool success)
+{
+    // 如果已有Toast，先删除
+    if(toast_label != NULL) {
+        lv_obj_del(toast_label);
+        toast_label = NULL;
+    }
+    
+    if(toast_timer != NULL) {
+        lv_timer_del(toast_timer);
+        toast_timer = NULL;
+    }
+    
+    // 创建Toast容器
+    toast_label = lv_obj_create(lv_scr_act());
+    lv_obj_set_size(toast_label, 180, 50);
+    lv_obj_align(toast_label, LV_ALIGN_BOTTOM_MID, 0, -30);
+    lv_obj_set_style_bg_color(toast_label, 
+                               success ? lv_color_hex(0x4CAF50) : lv_color_hex(0xE74C3C), 
+                               LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(toast_label, LV_OPA_90, LV_PART_MAIN);
+    lv_obj_set_style_border_width(toast_label, 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(toast_label, 8, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(toast_label, 10, LV_PART_MAIN);
+    lv_obj_set_style_shadow_color(toast_label, lv_color_hex(0x000000), LV_PART_MAIN);
+    lv_obj_set_style_shadow_opa(toast_label, LV_OPA_40, LV_PART_MAIN);
+    lv_obj_clear_flag(toast_label, LV_OBJ_FLAG_SCROLLABLE);
+    
+    // 创建文本标签
+    lv_obj_t *label = lv_label_create(toast_label);
+    obj_font_set(label, FONT_TYPE_CN, 16);
+    lv_label_set_text(label, message);
+    lv_obj_center(label);
+    lv_obj_set_style_text_color(label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    
+    // 创建定时器，2秒后自动隐藏
+    toast_timer = lv_timer_create(toast_timer_cb, 2000, NULL);
+    lv_timer_set_repeat_count(toast_timer, 1);
+    
+    printf("Toast: %s\n", message);
+}
 
 /* ========== 样式初始化 ========== */
 static void com_style_init(void)
@@ -139,10 +207,22 @@ void cleanup_pageNotebook(void)
         saveas_msgbox = NULL;
     }
     
+    // 清理Toast
+    if(toast_label != NULL) {
+        lv_obj_del(toast_label);
+        toast_label = NULL;
+    }
+    
+    if(toast_timer != NULL) {
+        lv_timer_del(toast_timer);
+        toast_timer = NULL;
+    }
+    
     // 清空文本编辑区和键盘指针
     textarea = NULL;
     keyboard = NULL;
     content_cont = NULL;
+    filename_textarea = NULL;
     keyboard_visible = false;
     
     printf("pageNotebook cleanup completed\n");
@@ -250,7 +330,7 @@ static void close_history_msgbox_cb(lv_event_t * e)
 static void delete_file_cb(lv_event_t * e)
 {
     // 获取文件名（从user_data中）
-    const char *filename = (const char *)lv_event_get_user_data(e);
+    char *filename = (char *)lv_event_get_user_data(e);
     
     if (filename == NULL) {
         printf("❌ Filename is NULL\n");
@@ -279,6 +359,9 @@ static void delete_file_cb(lv_event_t * e)
         snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", file_path);
         remove(tmp_path);  // 忽略返回值，临时文件可能不存在
         
+        // 释放strdup分配的内存
+        free(filename);
+        
         // 刷新历史记录列表：关闭并重新打开弹窗
         if(history_msgbox != NULL) {
             lv_obj_del(history_msgbox);
@@ -290,8 +373,11 @@ static void delete_file_cb(lv_event_t * e)
         switch_btn_event_cb(&dummy_event);
         
     } else {
+        // 删除失败后也添加 free(filename)
         printf("❌ Failed to delete file: %s (error: %d)\n", file_path, ret);
-        // TODO: 可以添加删除失败的UI提示
+        // 释放strdup分配的内存
+        free(filename);
+        show_toast("删除失败", false);
     }
 }
 
@@ -301,7 +387,7 @@ static void delete_file_cb(lv_event_t * e)
 static void edit_file_cb(lv_event_t * e)
 {
     // 获取文件名（从user_data中）
-    const char *filename = (const char *)lv_event_get_user_data(e);
+    char *filename = (char *)lv_event_get_user_data(e);
     
     if (filename == NULL) {
         printf("❌ Filename is NULL\n");
@@ -325,6 +411,9 @@ static void edit_file_cb(lv_event_t * e)
             printf("✅ File content loaded for editing: %s\n", filename);
         }
         
+        // 释放strdup分配的内存
+        free(filename);
+        
         // 关闭历史记录弹窗
         if(history_msgbox != NULL) {
             lv_obj_del(history_msgbox);
@@ -333,7 +422,9 @@ static void edit_file_cb(lv_event_t * e)
         
     } else {
         printf("❌ Failed to read file: %s (error: %d)\n", file_path, ret);
-        // TODO: 可以添加读取失败的UI提示
+        // 释放strdup分配的内存
+        free(filename);
+        show_toast("读取失败", false);
     }
 }
 
@@ -365,32 +456,77 @@ static void saveas_confirm_cb(lv_event_t * e)
     const char *text = lv_textarea_get_text(textarea);
     if (text == NULL || strlen(text) == 0) {
         printf("⚠️  Text is empty, nothing to save\n");
+        show_toast("内容为空", false);
         goto close_msgbox;
     }
     
     // 确保目录存在
     ensure_directory_exists(HISTORY_DIR);
     
-    // 查找可用的文件名（notebook1.txt, notebook2.txt, ...）
+    // 获取用户输入的文件名
     char new_file_path[256];
-    int file_index = 1;
+    const char *custom_filename = NULL;
     
-    while (file_index < 1000) {  // 最多支持1000个文件
-        snprintf(new_file_path, sizeof(new_file_path), 
-                 "%s/notebook%d.txt", HISTORY_DIR, file_index);
-        
-        // 检查文件是否已存在
-        if (access(new_file_path, F_OK) != 0) {
-            // 文件不存在，使用这个文件名
-            break;
-        }
-        
-        file_index++;
+    if (filename_textarea != NULL) {
+        custom_filename = lv_textarea_get_text(filename_textarea);
     }
     
-    if (file_index >= 1000) {
-        printf("❌ Too many files, cannot create more\n");
-        goto close_msgbox;
+    // 如果用户输入了自定义文件名
+    if (custom_filename != NULL && strlen(custom_filename) > 0) {
+        // 检查文件名是否合法（不含路径分隔符等特殊字符）
+        bool valid = true;
+        for (size_t i = 0; i < strlen(custom_filename); i++) {
+            char c = custom_filename[i];
+            if (c == '/' || c == '\\' || c == ':' || c == '*' || 
+                c == '?' || c == '"' || c == '<' || c == '>' || c == '|') {
+                valid = false;
+                break;
+            }
+        }
+        
+        if (!valid) {
+            printf("❌ Invalid filename: %s\n", custom_filename);
+            show_toast("文件名非法", false);
+            return;  // 不关闭弹窗，让用户修改
+        }
+        
+        // 自动添加.txt扩展名（如果没有）
+        if (strstr(custom_filename, ".txt") == NULL) {
+            snprintf(new_file_path, sizeof(new_file_path), 
+                     "%s/%s.txt", HISTORY_DIR, custom_filename);
+        } else {
+            snprintf(new_file_path, sizeof(new_file_path), 
+                     "%s/%s", HISTORY_DIR, custom_filename);
+        }
+        
+        // 检查文件是否已存在
+        if (access(new_file_path, F_OK) == 0) {
+            printf("⚠️  File already exists: %s\n", new_file_path);
+            show_toast("文件已存在", false);
+            return;  // 不关闭弹窗，让用户修改
+        }
+    } else {
+        // 如果用户没有输入，使用自动递增命名
+        int file_index = 1;
+        
+        while (file_index < 1000) {  // 最多支持1000个文件
+            snprintf(new_file_path, sizeof(new_file_path), 
+                     "%s/notebook%d.txt", HISTORY_DIR, file_index);
+            
+            // 检查文件是否已存在
+            if (access(new_file_path, F_OK) != 0) {
+                // 文件不存在，使用这个文件名
+                break;
+            }
+            
+            file_index++;
+        }
+        
+        if (file_index >= 1000) {
+            printf("❌ Too many files, cannot create more\n");
+            show_toast("文件过多", false);
+            goto close_msgbox;
+        }
     }
     
     printf("📝 Saving as: %s\n", new_file_path);
@@ -401,17 +537,17 @@ static void saveas_confirm_cb(lv_event_t * e)
     if (ret == FILE_OK) {
         printf("✅ File saved successfully as %s\n", new_file_path);
         printf("Content length: %zu bytes\n", strlen(text));
-        
-        // TODO: 可以添加保存成功的UI提示
+        show_toast("保存成功", true);
     } else {
         printf("❌ Failed to save file (error: %d)\n", ret);
-        // TODO: 可以添加保存失败的UI提示
+        show_toast("保存失败", false);
     }
     
 close_msgbox:
     if(saveas_msgbox != NULL) {
         lv_obj_del(saveas_msgbox);
         saveas_msgbox = NULL;
+        filename_textarea = NULL;
         printf("Save as msgbox closed\n");
     }
 }
@@ -427,11 +563,12 @@ static void saveas_btn_event_cb(lv_event_t * e)
     if(saveas_msgbox != NULL) {
         lv_obj_del(saveas_msgbox);
         saveas_msgbox = NULL;
+        filename_textarea = NULL;
     }
     
     // 创建另存弹窗容器
     saveas_msgbox = lv_obj_create(lv_scr_act());
-    lv_obj_set_size(saveas_msgbox, 240, 160);
+    lv_obj_set_size(saveas_msgbox, 320, 200);
     lv_obj_center(saveas_msgbox);  // 居中显示
     lv_obj_set_style_bg_color(saveas_msgbox, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
     lv_obj_set_style_border_color(saveas_msgbox, lv_color_hex(0x3498DB), LV_PART_MAIN);
@@ -446,25 +583,39 @@ static void saveas_btn_event_cb(lv_event_t * e)
     lv_obj_t *title_label = lv_label_create(saveas_msgbox);
     obj_font_set(title_label, FONT_TYPE_CN, 18);
     lv_label_set_text(title_label, "另存为");
-    lv_obj_align(title_label, LV_ALIGN_TOP_MID, 0, -10);
+    lv_obj_align(title_label, LV_ALIGN_TOP_MID, 0, 10);
     lv_obj_set_style_text_color(title_label, lv_color_hex(0x333333), LV_PART_MAIN);
     
-    // 创建内容区域（可以添加文件名输入框等）
-    lv_obj_t *content_label = lv_label_create(saveas_msgbox);
-    obj_font_set(content_label, FONT_TYPE_CN, 14);
-    lv_label_set_text(content_label, "确认另存为新文件？");
-    lv_obj_align(content_label, LV_ALIGN_CENTER, 0, 0);
-    lv_obj_set_style_text_color(content_label, lv_color_hex(0x666666), LV_PART_MAIN);
+    // 创建提示文本
+    lv_obj_t *hint_label = lv_label_create(saveas_msgbox);
+    obj_font_set(hint_label, FONT_TYPE_CN, 12);
+    lv_label_set_text(hint_label, "输入文件名(留空自动命名)");
+    lv_obj_align(hint_label, LV_ALIGN_TOP_MID, 0, 40);
+    lv_obj_set_style_text_color(hint_label, lv_color_hex(0x999999), LV_PART_MAIN);
+    
+    // 创建文件名输入框
+    filename_textarea = lv_textarea_create(saveas_msgbox);
+    lv_obj_set_size(filename_textarea, 280, 40);
+    lv_obj_align(filename_textarea, LV_ALIGN_TOP_MID, 0, 70);
+    lv_textarea_set_placeholder_text(filename_textarea, "例如: 我的笔记");
+    lv_textarea_set_one_line(filename_textarea, true);
+    lv_textarea_set_max_length(filename_textarea, 50);
+    obj_font_set(filename_textarea, FONT_TYPE_CN, 16);
+    lv_obj_set_style_bg_color(filename_textarea, lv_color_hex(0xF5F5F5), LV_PART_MAIN);
+    lv_obj_set_style_border_color(filename_textarea, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
+    lv_obj_set_style_border_width(filename_textarea, 1, LV_PART_MAIN);
+    lv_obj_set_style_radius(filename_textarea, 5, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(filename_textarea, 8, LV_PART_MAIN);
     
     // 左下角：取消按钮
     lv_obj_t *cancel_btn = lv_btn_create(saveas_msgbox);
-    lv_obj_set_size(cancel_btn, 70, 30);
-    lv_obj_align(cancel_btn, LV_ALIGN_BOTTOM_LEFT, 15, -10);
+    lv_obj_set_size(cancel_btn, 80, 35);
+    lv_obj_align(cancel_btn, LV_ALIGN_BOTTOM_LEFT, 25, -15);
     lv_obj_set_style_bg_color(cancel_btn, lv_color_hex(0x95A5A6), LV_PART_MAIN);
     lv_obj_set_style_radius(cancel_btn, 5, LV_PART_MAIN);
     
     lv_obj_t *cancel_label = lv_label_create(cancel_btn);
-    obj_font_set(cancel_label, FONT_TYPE_CN, 14);
+    obj_font_set(cancel_label, FONT_TYPE_CN, 16);
     lv_label_set_text(cancel_label, "取消");
     lv_obj_center(cancel_label);
     lv_obj_set_style_text_color(cancel_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
@@ -473,13 +624,13 @@ static void saveas_btn_event_cb(lv_event_t * e)
     
     // 右下角：确认按钮
     lv_obj_t *confirm_btn = lv_btn_create(saveas_msgbox);
-    lv_obj_set_size(confirm_btn, 70, 30);
-    lv_obj_align(confirm_btn, LV_ALIGN_BOTTOM_RIGHT, -15, -10);
+    lv_obj_set_size(confirm_btn, 80, 35);
+    lv_obj_align(confirm_btn, LV_ALIGN_BOTTOM_RIGHT, -25, -15);
     lv_obj_set_style_bg_color(confirm_btn, lv_color_hex(0x3498DB), LV_PART_MAIN);
     lv_obj_set_style_radius(confirm_btn, 5, LV_PART_MAIN);
     
     lv_obj_t *confirm_label = lv_label_create(confirm_btn);
-    obj_font_set(confirm_label, FONT_TYPE_CN, 14);
+    obj_font_set(confirm_label, FONT_TYPE_CN, 16);
     lv_label_set_text(confirm_label, "确认");
     lv_obj_center(confirm_label);
     lv_obj_set_style_text_color(confirm_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
@@ -716,10 +867,10 @@ static void save_btn_event_cb(lv_event_t * e)
         
         if (ret == FILE_OK) {
             printf("✅ Notebook content saved successfully with power-loss protection\n");
-            // TODO: 可以添加保存成功的UI提示
+            show_toast("保存成功", true);
         } else {
             printf("❌ Failed to save notebook content (error: %d)\n", ret);
-            // TODO: 可以添加保存失败的UI提示
+            show_toast("保存失败", false);
         }
     }
 }
