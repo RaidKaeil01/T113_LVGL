@@ -41,7 +41,7 @@
 - **主菜单**: `pageMenu.c` —— 统一导航中心，管理功能入口并转发 UI 事件
 
 <div align="center">
-<img src="/home/stu/T113-S3/app_sdk/note/note-image/00.png" alt="主菜单" width="750"/>
+<img src="note/note-image/00.png" alt="主菜单" width="750"/>
 </div>
 
 ### ⏰ 时钟展示
@@ -57,8 +57,8 @@
   - 支持断线重连
 
 <div align="center">
-<img src="/home/stu/T113-S3/app_sdk/note/note-image/05.png" alt="WiFi扫描" width="750"/>
-<img src="/home/stu/T113-S3/app_sdk/note/note-image/04.png" alt="WiFi连接" width="750"/>
+<img src="note/note-image/05.png" alt="WiFi扫描" width="750"/>
+<img src="note/note-image/04.png" alt="WiFi连接" width="750"/>
 </div>
 
 ### 🎵 音乐播放
@@ -88,8 +88,8 @@
   - 自定义文件名输入与校验
 
 <div align="center">
-<img src="/home/stu/T113-S3/app_sdk/note/note-image/06.png" alt="笔记列表" width="750"/>
-<img src="/home/stu/T113-S3/app_sdk/note/note-image/02.png" alt="笔记编辑" width="750"/>
+<img src="note/note-image/06.png" alt="笔记列表" width="750"/>
+<img src="note/note-image/02.png" alt="笔记编辑" width="750"/>
 </div>
 
 ### ⚙️ 设置入口
